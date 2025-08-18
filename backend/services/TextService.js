@@ -41,12 +41,21 @@ class TextService {
 
         // 尝试多种可能的字段路径
         let content = null;
-        if (response.data?.outputs?.text && response.data.outputs.text.trim()) {
+        if (response.data?.outputs?.text2 && response.data.outputs.text2.trim()) {
+          content = response.data.outputs.text2;
+          console.log('✅ 从outputs.text2获取内容');
+        } else if (response.data?.outputs?.text && response.data.outputs.text.trim()) {
           content = response.data.outputs.text;
           console.log('✅ 从outputs.text获取内容');
+        } else if (response.data?.text2 && response.data.text2.trim()) {
+          content = response.data.text2;
+          console.log('✅ 从text2获取内容');
         } else if (response.data?.text && response.data.text.trim()) {
           content = response.data.text;
           console.log('✅ 从text获取内容');
+        } else if (response.data?.data?.outputs?.text2 && response.data.data.outputs.text2.trim()) {
+          content = response.data.data.outputs.text2;
+          console.log('✅ 从data.outputs.text2获取内容');
         } else if (response.data?.data?.outputs?.text && response.data.data.outputs.text.trim()) {
           content = response.data.data.outputs.text;
           console.log('✅ 从data.outputs.text获取内容');
