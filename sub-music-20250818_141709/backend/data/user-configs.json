@@ -1,0 +1,29 @@
+{
+  "configs": [
+    {
+      "id": "1755251722849",
+      "name": "专注模式",
+      "config": {
+        "volumes": {
+          "voice": 10,
+          "binaural": 15,
+          "background": 60,
+          "environment": 15
+        }
+      },
+      "createdAt": "2025-08-15T09:55:22.849Z",
+      "updatedAt": "2025-08-15T09:55:22.849Z"
+    }
+  ],
+  "lastUsed": {
+    "config": {
+      "volumes": {
+        "voice": 0,
+        "binaural": 50,
+        "background": 0,
+        "environment": 0
+      }
+    },
+    "updatedAt": "2025-08-18T05:48:46.202Z"
+  }
+}

@@ -47,35 +47,38 @@ class AudioService {
     console.log(`🎵 生成双耳节拍: 左耳${leftFreq}Hz, 右耳${rightFreq}Hz, 时长${duration}秒`);
 
     return new Promise((resolve, reject) => {
-      // 使用FFmpeg的anullsrc和sine滤镜生成双耳节拍
-      const command = ffmpeg();
+      // 直接使用spawn调用ffmpeg，避免fluent-ffmpeg的格式检查问题
+      const { spawn } = require('child_process');
 
-      // 使用anullsrc作为输入源，然后通过滤镜生成双耳节拍
-      command
-        .input('anullsrc=channel_layout=stereo:sample_rate=44100')
-        .inputFormat('lavfi')
-        .complexFilter([
-          // 生成左声道正弦波
-          `[0:a]asplit=2[left][right]`,
-          // 左声道使用leftFreq频率
-          `[left]sine=frequency=${leftFreq}:duration=${duration}[leftout]`,
-          // 右声道使用rightFreq频率
-          `[right]sine=frequency=${rightFreq}:duration=${duration}[rightout]`,
-          // 合并左右声道
-          `[leftout][rightout]amerge=inputs=2[out]`
-        ])
-        .map('[out]')
-        .audioCodec('libmp3lame')
-        .audioBitrate('128k')
-        .audioFilters('volume=0.3') // 设置适中的音量
-        .duration(duration)
-        .output(outputFile)
-        .on('end', () => {
+      const args = [
+        '-f', 'lavfi',
+        '-i', `sine=frequency=${leftFreq}:duration=${duration}`,
+        '-f', 'lavfi',
+        '-i', `sine=frequency=${rightFreq}:duration=${duration}`,
+        '-filter_complex', '[0:a][1:a]amerge=inputs=2,volume=0.3[out]',
+        '-map', '[out]',
+        '-c:a', 'libmp3lame',
+        '-b:a', '128k',
+        '-y', // 覆盖输出文件
+        outputFile
+      ];
+
+      console.log(`🔧 FFmpeg命令: ffmpeg ${args.join(' ')}`);
+
+      const ffmpegProcess = spawn('ffmpeg', args);
+
+      let stderr = '';
+
+      ffmpegProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      ffmpegProcess.on('close', (code) => {
+        if (code === 0) {
           console.log(`✅ 双耳节拍生成完成: ${outputFile}`);
           resolve(outputFile);
-        })
-        .on('error', (err) => {
-          console.error('❌ 双耳节拍生成失败:', err);
+        } else {
+          console.error('❌ 双耳节拍生成失败:', stderr);
           // 如果生成失败，使用简化方法
           this.generateSimpleBinauralBeats(leftFreq, rightFreq, duration, outputFile)
             .then(resolve)
@@ -85,8 +88,20 @@ class AudioService {
                 .then(resolve)
                 .catch(reject);
             });
-        })
-        .run();
+        }
+      });
+
+      ffmpegProcess.on('error', (err) => {
+        console.error('❌ FFmpeg进程启动失败:', err);
+        // 使用简化方法
+        this.generateSimpleBinauralBeats(leftFreq, rightFreq, duration, outputFile)
+          .then(resolve)
+          .catch(() => {
+            this.createRealSilentMP3(duration, outputFile)
+              .then(resolve)
+              .catch(reject);
+          });
+      });
     });
   }
 
