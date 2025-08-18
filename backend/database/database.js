@@ -92,9 +92,18 @@ async function init() {
     await sequelize.authenticate();
     console.log('✅ Database connection established successfully.');
     
-    // 同步模型到数据库（强制重建以添加新字段）
-    await sequelize.sync({ force: true });
-    console.log('✅ Database models synchronized with force rebuild.');
+    // 同步模型到数据库
+    try {
+      await sequelize.sync({ alter: true });
+      console.log('✅ Database models synchronized with schema updates.');
+    } catch (error) {
+      console.log('⚠️ Schema update failed, trying force sync...');
+      console.error('Schema update error:', error.message);
+
+      // 如果 alter 失败，使用 force 重建数据库
+      await sequelize.sync({ force: true });
+      console.log('✅ Database models synchronized with force rebuild.');
+    }
   } catch (error) {
     console.error('❌ Unable to connect to the database:', error);
   }

@@ -11,7 +11,11 @@ class TextService {
     if (!this.config.dify.api_key || !this.config.dify.workflow_id) {
       // 模拟响应用于测试
       console.log('⚠️ 使用模拟内容（Dify配置缺失）');
-      return this.generateMockContent(userInput);
+      const mockContent = this.generateMockContent(userInput);
+      return {
+        outline: mockContent.substring(0, 500) + '...',
+        content: mockContent
+      };
     }
 
     // 重试机制：最多重试3次
@@ -35,50 +39,75 @@ class TextService {
             continue;
           } else {
             console.log('❌ 所有重试都失败，使用模拟内容');
-            return this.generateMockContent(userInput);
+            const mockContent = this.generateMockContent(userInput);
+            return {
+              outline: mockContent.substring(0, 500) + '...',
+              content: mockContent
+            };
           }
         }
 
-        // 尝试多种可能的字段路径
-        let content = null;
+        // 提取大纲内容 (text2字段)
+        let outline = null;
         if (response.data?.outputs?.text2 && response.data.outputs.text2.trim()) {
-          content = response.data.outputs.text2;
-          console.log('✅ 从outputs.text2获取内容');
-        } else if (response.data?.outputs?.text && response.data.outputs.text.trim()) {
-          content = response.data.outputs.text;
-          console.log('✅ 从outputs.text获取内容');
+          outline = response.data.outputs.text2;
+          console.log('✅ 从outputs.text2获取大纲内容');
         } else if (response.data?.text2 && response.data.text2.trim()) {
-          content = response.data.text2;
-          console.log('✅ 从text2获取内容');
+          outline = response.data.text2;
+          console.log('✅ 从text2获取大纲内容');
+        } else if (response.data?.data?.outputs?.text2 && response.data.data.outputs.text2.trim()) {
+          outline = response.data.data.outputs.text2;
+          console.log('✅ 从data.outputs.text2获取大纲内容');
+        }
+
+        // 提取扩写内容 (text字段)
+        let content = null;
+        if (response.data?.outputs?.text && response.data.outputs.text.trim()) {
+          content = response.data.outputs.text;
+          console.log('✅ 从outputs.text获取扩写内容');
         } else if (response.data?.text && response.data.text.trim()) {
           content = response.data.text;
-          console.log('✅ 从text获取内容');
-        } else if (response.data?.data?.outputs?.text2 && response.data.data.outputs.text2.trim()) {
-          content = response.data.data.outputs.text2;
-          console.log('✅ 从data.outputs.text2获取内容');
+          console.log('✅ 从text获取扩写内容');
         } else if (response.data?.data?.outputs?.text && response.data.data.outputs.text.trim()) {
           content = response.data.data.outputs.text;
-          console.log('✅ 从data.outputs.text获取内容');
+          console.log('✅ 从data.outputs.text获取扩写内容');
         } else if (response.data?.answer && response.data.answer.trim()) {
           content = response.data.answer;
-          console.log('✅ 从answer获取内容');
-        } else {
+          console.log('✅ 从answer获取扩写内容');
+        }
+
+        // 如果没有找到内容，尝试重试
+        if (!outline && !content) {
           console.log(`❌ 未找到有效内容 (尝试 ${attempt}/${maxRetries})`);
           if (attempt < maxRetries) {
             console.log(`⏳ 等待 ${attempt * 2} 秒后重试...`);
             await new Promise(resolve => setTimeout(resolve, attempt * 2000));
             continue;
           } else {
-            content = this.generateMockContent(userInput);
-            console.log('❌ 所有重试都失败，使用模拟内容');
+            const mockContent = this.generateMockContent(userInput);
+            return {
+              outline: mockContent.substring(0, 500) + '...',
+              content: mockContent
+            };
           }
         }
 
-        if (content && content.trim() && content !== '内容生成完成') {
-          console.log('✅ Dify工作流响应成功，内容长度:', content.length);
-          console.log('📝 Dify返回内容预览:', content.substring(0, 200) + '...');
-          return content;
+        // 如果只有一个字段有内容，使用它作为扩写内容，并生成简短大纲
+        if (!outline && content) {
+          outline = content.length > 500 ? content.substring(0, 500) + '...' : content;
         }
+        if (!content && outline) {
+          content = outline;
+        }
+
+        console.log('✅ Dify工作流响应成功');
+        console.log('📝 大纲内容长度:', outline?.length || 0);
+        console.log('📝 扩写内容长度:', content?.length || 0);
+
+        return {
+          outline: outline || '',
+          content: content || ''
+        };
       } catch (error) {
         console.error(`❌ Dify工作流调用失败 (尝试 ${attempt}/${maxRetries}):`, error.message);
         if (attempt < maxRetries) {
@@ -89,12 +118,17 @@ class TextService {
     }
 
     console.log('⚠️ 所有重试都失败，使用模拟内容作为备选');
-    return this.generateMockContent(userInput);
+    const mockContent = this.generateMockContent(userInput);
+    return {
+      outline: mockContent.substring(0, 500) + '...',
+      content: mockContent
+    };
   }
 
   // 生成大纲（保留兼容性）
   async generateOutline(userInput) {
-    return this.generateContent(userInput);
+    const result = await this.generateContent(userInput);
+    return result.outline || result.content || '';
   }
 
   // 扩写内容

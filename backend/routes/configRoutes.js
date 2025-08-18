@@ -89,20 +89,46 @@ router.post('/', async (req, res) => {
   }
 });
 
+// 保存最后使用的配置
+router.post('/last-used', async (req, res) => {
+  try {
+    const { config } = req.body;
+
+    if (!config) {
+      return res.status(400).json({ error: 'Config is required' });
+    }
+
+    const data = await readConfigs();
+
+    // 更新最后使用的配置
+    data.lastUsed = {
+      config,
+      updatedAt: new Date().toISOString()
+    };
+
+    await writeConfigs(data);
+    console.log('✅ 最后使用的配置已保存:', config);
+    res.json({ message: 'Last used config saved successfully' });
+  } catch (error) {
+    console.error('Save last used config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 删除配置
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const data = await readConfigs();
-    
+
     const index = data.configs.findIndex(c => c.id === id);
     if (index === -1) {
       return res.status(404).json({ error: 'Config not found' });
     }
-    
+
     data.configs.splice(index, 1);
     await writeConfigs(data);
-    
+
     res.json({ message: 'Config deleted successfully' });
   } catch (error) {
     console.error('Delete config error:', error);

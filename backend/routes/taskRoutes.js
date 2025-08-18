@@ -34,7 +34,8 @@ module.exports = (taskService) => {
         volume_voice,
         volume_binaural,
         volume_background,
-        volume_environment
+        volume_environment,
+        audio_name
       } = req.body;
 
       if (!user_input) {
@@ -49,6 +50,7 @@ module.exports = (taskService) => {
         noiseType: noise_type || 'rain',
         voiceSpeed: parseFloat(voice_speed) || 6,
         backgroundMusic: req.file ? req.file.path : null,
+        audioName: audio_name || null,
         volumes: {
           voice: parseFloat(volume_voice) || 0.05,
           binaural: parseFloat(volume_binaural) || 0.1,
@@ -92,20 +94,59 @@ module.exports = (taskService) => {
     }
   });
 
+  // 删除所有任务
+  router.delete('/', async (req, res) => {
+    try {
+      await taskService.clearAllTasks();
+      res.json({ message: 'All tasks cleared successfully' });
+    } catch (error) {
+      console.error('Clear tasks error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // 下载文件
   router.get('/download/:filename', (req, res) => {
     try {
       const filename = req.params.filename;
-      const filePath = path.join(__dirname, '../temp', filename);
+      console.log(`📥 下载请求: ${filename}`);
+
+      const audioService = new (require('../services/AudioService'))();
+
+      // 首先尝试从输出目录查找
+      let filePath = path.join(audioService.outputDir, filename);
+      console.log(`📁 检查输出目录: ${filePath}`);
+
+      if (!fs.existsSync(filePath)) {
+        // 如果输出目录没有，尝试临时目录
+        filePath = path.join(audioService.tempDir, filename);
+        console.log(`📁 检查临时目录: ${filePath}`);
+      }
 
       // 检查文件是否存在
       if (!fs.existsSync(filePath)) {
+        console.log(`❌ 文件不存在: ${filePath}`);
         return res.status(404).json({ error: 'File not found' });
       }
 
-      res.download(filePath, filename);
+      console.log(`✅ 找到文件，开始下载: ${filePath}`);
+
+      // 设置下载头
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'audio/mpeg');
+
+      res.download(filePath, filename, (err) => {
+        if (err) {
+          console.error('❌ 下载失败:', err);
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Download failed' });
+          }
+        } else {
+          console.log(`✅ 下载完成: ${filename}`);
+        }
+      });
     } catch (error) {
-      console.error('Download error:', error);
+      console.error('❌ 下载错误:', error);
       res.status(500).json({ error: 'Failed to download file' });
     }
   });
@@ -114,6 +155,8 @@ module.exports = (taskService) => {
   router.get('/preview/:type/:filename', async (req, res) => {
     try {
       const { type, filename } = req.params;
+      console.log(`🎵 音频预览请求: type=${type}, filename=${filename}`);
+
       const audioService = new (require('../services/AudioService'))();
 
       let filePath;
@@ -135,12 +178,18 @@ module.exports = (taskService) => {
           filePath = path.join(audioService.outputDir, filename);
           break;
         default:
+          console.log(`❌ 无效的音频类型: ${type}`);
           return res.status(400).json({ error: 'Invalid audio type' });
       }
 
+      console.log(`📁 查找音频文件: ${filePath}`);
+
       if (!filePath || !fs.existsSync(filePath)) {
+        console.log(`❌ 音频文件不存在: ${filePath}`);
         return res.status(404).json({ error: 'Audio file not found' });
       }
+
+      console.log(`✅ 找到音频文件: ${filePath}`);
 
       // 设置正确的Content-Type
       const ext = path.extname(filePath).toLowerCase();

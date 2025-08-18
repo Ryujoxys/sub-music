@@ -21,7 +21,8 @@ class TaskService {
       noiseType = 'rain',
       voiceSpeed = 6,
       backgroundMusic = null,
-      volumes = { voice: 0.05, binaural: 0.1, background: 0.7 }
+      volumes = { voice: 0.05, binaural: 0.1, background: 0.7 },
+      audioName = null
     } = options;
 
     // 检查是否有其他任务正在处理，如果有则清理temp文件
@@ -44,7 +45,8 @@ class TaskService {
       noiseType,
       voiceSpeed,
       backgroundMusic,
-      volumes
+      volumes,
+      audioName
     });
 
     return task;
@@ -65,6 +67,14 @@ class TaskService {
     return tasks;
   }
 
+  async clearAllTasks() {
+    // 删除所有音频文件记录
+    await AudioFile.destroy({ where: {} });
+    // 删除所有任务记录
+    await Task.destroy({ where: {} });
+    console.log('✅ 所有任务已清空');
+  }
+
   async updateTask(id, updates) {
     await Task.update(updates, { where: { id } });
     
@@ -82,9 +92,9 @@ class TaskService {
 
     // 发送进度更新
     this.io.emit('progress', {
-      taskId: id,
+      task_id: id,
       status: 'processing',
-      currentStep: step,
+      current_step: step,
       progress,
       message
     });
@@ -93,14 +103,28 @@ class TaskService {
   // 发送详细步骤更新
   sendStepUpdate(taskId, step, status, content = '', file = '', error = '') {
     if (this.io) {
-      this.io.emit('step_update', {
+      const updateData = {
         task_id: taskId,
         step: step,
         status: status,
         content: content,
         file: file,
         error: error
+      };
+
+      console.log(`📡 发送步骤更新: ${step} -> ${status}`, {
+        task_id: taskId,
+        step: step,
+        status: status,
+        contentLength: content?.length || 0,
+        contentPreview: content?.substring(0, 100) + '...' || '',
+        file: file,
+        error: error
       });
+
+      this.io.emit('step_update', updateData);
+    } else {
+      console.log('❌ WebSocket IO 未初始化，无法发送步骤更新');
     }
   }
 
@@ -112,10 +136,11 @@ class TaskService {
     });
 
     this.io.emit('completed', {
-      taskId: id,
+      task_id: id,
       status: 'completed',
       progress: 100,
-      message: '任务完成！'
+      message: '任务完成！',
+      output_file: outputFile
     });
   }
 
@@ -126,7 +151,7 @@ class TaskService {
     });
 
     this.io.emit('failed', {
-      taskId: id,
+      task_id: id,
       status: 'failed',
       message: errorMsg
     });
@@ -153,7 +178,8 @@ class TaskService {
         noiseType = 'rain',
         voiceSpeed = 6,
         backgroundMusic = null,
-        volumes = { voice: 0.05, binaural: 0.1, background: 0.7 }
+        volumes = { voice: 0.05, binaural: 0.1, background: 0.7 },
+        audioName = null
       } = options;
 
       // 步骤1: Dify工作流处理（大纲生成+内容扩写）
@@ -161,11 +187,22 @@ class TaskService {
       this.sendStepUpdate(taskId, 'outline', 'processing');
 
       console.log('🔄 开始Dify工作流处理...');
-      const content = await this.textService.generateContent(task.userInput);
-      await this.updateTask(taskId, { content });
+      const result = await this.textService.generateContent(task.userInput);
+      console.log('📝 Dify工作流返回结果:', {
+        outline: result.outline?.substring(0, 100) + '...',
+        content: result.content?.substring(0, 100) + '...',
+        outlineLength: result.outline?.length || 0,
+        contentLength: result.content?.length || 0
+      });
 
-      this.sendStepUpdate(taskId, 'outline', 'completed', content.substring(0, 200) + '...');
-      this.sendStepUpdate(taskId, 'expansion', 'completed', content);
+      // 保存大纲和完整内容到数据库
+      await this.updateTask(taskId, {
+        outline: result.outline,
+        content: result.content
+      });
+
+      this.sendStepUpdate(taskId, 'outline', 'completed', result.outline);
+      this.sendStepUpdate(taskId, 'expansion', 'completed', result.content);
       console.log('✅ Dify工作流处理完成');
 
       // 步骤2: TTS转换
@@ -173,7 +210,7 @@ class TaskService {
       this.sendStepUpdate(taskId, 'tts', 'processing');
 
       console.log('🔄 开始TTS转换...');
-      const voiceFile = await this.ttsService.convertText(content, taskId);
+      const voiceFile = await this.ttsService.convertText(result.content, taskId);
       await this.addAudioFile(taskId, 'voice', voiceFile);
       this.sendStepUpdate(taskId, 'tts', 'completed', '', voiceFile);
       console.log('✅ TTS转换完成:', voiceFile);
@@ -204,7 +241,8 @@ class TaskService {
         volumes: volumes,                       // 音量配置
         subTheme: task.sub_theme,
         taskId: taskId,
-        duration: duration
+        duration: duration,
+        audioName: audioName                    // 自定义音频名称
       });
       await this.addAudioFile(taskId, 'final', finalAudioFile);
       this.sendStepUpdate(taskId, 'mixing', 'completed', '', finalAudioFile);
@@ -215,10 +253,13 @@ class TaskService {
       await this.setTaskCompleted(taskId, finalAudioFile);
 
     } catch (error) {
-      console.error('Task processing error:', error);
+      console.error('❌ 任务处理失败:', error);
+      console.error('❌ 错误堆栈:', error.stack);
+      console.error('❌ 任务ID:', taskId);
 
       // 发送错误步骤更新
       const errorStep = this.getCurrentStepFromError(error);
+      console.log(`❌ 错误发生在步骤: ${errorStep}`);
       this.sendStepUpdate(taskId, errorStep, 'failed', '', '', error.message);
 
       await this.setTaskFailed(taskId, error.message);

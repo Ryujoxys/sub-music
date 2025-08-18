@@ -1,0 +1,20 @@
+{
+  "watch": [
+    "*.js",
+    "routes/*.js",
+    "services/*.js",
+    "database/*.js",
+    "config/*.js"
+  ],
+  "ignore": [
+    "node_modules",
+    "temp/*",
+    "output/*",
+    "database.sqlite",
+    "*.log",
+    "*.mp3",
+    "*.wav"
+  ],
+  "ext": "js,json",
+  "delay": 2000
+}

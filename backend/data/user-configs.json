@@ -18,12 +18,17 @@
   "lastUsed": {
     "config": {
       "volumes": {
-        "voice": 0,
-        "binaural": 50,
-        "background": 0,
-        "environment": 0
-      }
+        "voice": 10,
+        "binaural": 15,
+        "background": 60,
+        "environment": 15
+      },
+      "binauralType": "alpha",
+      "noiseType": "rain",
+      "whiteNoiseType": "pink",
+      "voiceSpeed": 6,
+      "duration": 30
     },
-    "updatedAt": "2025-08-18T06:19:55.634Z"
+    "updatedAt": "2025-08-18T11:01:05.335Z"
   }
 }

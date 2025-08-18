@@ -256,8 +256,10 @@ class AudioService {
   }
 
   // 混合多个音频文件
-  async mixAudio({ voiceFile, binauralFile, backgroundMusic, noiseType, voiceSpeed, volumes, subTheme, taskId, duration }) {
-    const outputFile = path.join(this.outputDir, `task_${taskId}.mp3`);
+  async mixAudio({ voiceFile, binauralFile, backgroundMusic, noiseType, voiceSpeed, volumes, subTheme, taskId, duration, audioName }) {
+    // 使用自定义音频名称或默认名称
+    const fileName = audioName ? `${audioName}.mp3` : `task_${taskId}.mp3`;
+    const outputFile = path.join(this.outputDir, fileName);
     await this.ensureDir(path.dirname(outputFile));
 
     // 确定目标时长：优先使用背景音乐时长，其次是用户指定时长，最后是默认时长
