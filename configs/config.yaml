@@ -1,0 +1,50 @@
+server:
+  port: 8080
+  host: localhost
+  cors_origins:
+    - "http://localhost:3000"
+
+database:
+  type: sqlite
+  path: ./data/app.db
+
+storage:
+  temp_dir: ./temp
+  output_dir: ./output
+  assets_dir: ./assets
+
+# Dify工作流配置
+dify:
+  api_key: "app-HVLVLTxzFD40EatGtFQexKeI"
+  base_url: "http://dify.llingjiu.com/v1"
+  workflow_id: "app-HVLVLTxzFD40EatGtFQexKeI"  # 工作流ID
+
+# 科大讯飞TTS配置
+xfyun:
+  app_id: "08c5e5dd"
+  api_key: "53e457e33c2415a787f4d8fef96d570a"
+  api_secret: "ZWZmZmNhM2IzNmFjNDg5NWMyZjZjYTE1"
+  host_url: "wss://tts-api.xfyun.cn/v2/tts"
+  voice_name: "x4_yezi"  # 语音合成参数
+
+# 音频处理配置
+audio:
+  sample_rate: 44100
+  bit_rate: 320
+  format: mp3
+  max_duration: 3600  # 最大时长(秒)
+  
+  # 音量配置 (0.0-1.0)
+  volumes:
+    voice: 0.05     # 语音音量 5%
+    binaural: 0.1   # 双耳节拍音量 10%
+    whitenoise: 0.7 # 白噪音音量 70%
+    bgm: 0.9        # 背景音乐音量 90%
+
+  # 语音处理配置
+  voice_speed: 10   # 语音播放速度倍数
+
+# FFmpeg配置
+ffmpeg:
+  binary_path: "ffmpeg"  # FFmpeg可执行文件路径
+  temp_format: "wav"     # 临时文件格式

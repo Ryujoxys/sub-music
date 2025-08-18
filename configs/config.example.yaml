@@ -1,0 +1,47 @@
+server:
+  port: 8080
+  host: localhost
+  cors_origins:
+    - "http://localhost:3000"
+
+database:
+  type: sqlite
+  path: ./data/app.db
+
+storage:
+  temp_dir: ./temp
+  output_dir: ./output
+  assets_dir: ./assets
+
+# Dify工作流配置
+dify:
+  api_key: "your_dify_api_key_here"
+  base_url: "https://api.dify.ai"
+  outline_workflow_id: "your_outline_workflow_id"
+  expand_workflow_id: "your_expand_workflow_id"
+
+# 科大讯飞TTS配置
+xfyun:
+  app_id: "your_app_id_here"
+  api_key: "your_api_key_here"
+  api_secret: "your_api_secret_here"
+  host_url: "https://tts-api.xfyun.cn"
+
+# 音频处理配置
+audio:
+  sample_rate: 44100
+  bit_rate: 320
+  format: mp3
+  max_duration: 3600  # 最大时长(秒)
+  
+  # 音量配置 (0.0-1.0)
+  volumes:
+    voice: 0.8      # 语音音量
+    binaural: 0.3   # 双耳节拍音量
+    whitenoise: 0.2 # 白噪音音量
+    bgm: 0.4        # 背景音乐音量
+
+# FFmpeg配置
+ffmpeg:
+  binary_path: "ffmpeg"  # FFmpeg可执行文件路径
+  temp_format: "wav"     # 临时文件格式
