@@ -25,58 +25,102 @@ class AudioService {
     };
 
     const freq = frequencies[type] || frequencies.alpha;
-    const outputFile = path.join(this.tempDir, `binaural_${type}_${Date.now()}.wav`);
+    const outputFile = path.join(this.tempDir, `binaural_${type}_${Date.now()}.mp3`);
 
     // 确保目录存在
     await this.ensureDir(path.dirname(outputFile));
 
-    // 简化双耳节拍生成：直接使用现有音频文件作为替代
-    console.log(`🧠 生成双耳节拍: ${type} (${freq.right - freq.left}Hz)`);
+    console.log(`🧠 生成真正的双耳节拍: ${type} (${freq.right - freq.left}Hz)`);
 
-    // 使用现有音频文件作为双耳节拍的替代（降低音量）
-    console.log(`🎵 使用替代音频文件作为双耳节拍`);
-    const fallbackFile = this.getNaturalAudioFile('light-rain'); // 使用雨声作为替代
-    console.log(`🔍 检查替代文件: ${fallbackFile}`);
-
-    if (fallbackFile && await this.fileExists(fallbackFile)) {
-      console.log(`✅ 替代文件存在，创建低音量双耳节拍`);
-      return this.createLowVolumeAudio(fallbackFile, duration, outputFile);
-    } else {
-      console.log(`❌ 替代文件不存在: ${fallbackFile}`);
-      // 最后的备选方案：创建一个真正的MP3文件
+    try {
+      // 尝试生成真正的双耳节拍
+      return await this.generateRealBinauralBeats(freq.left, freq.right, duration, outputFile);
+    } catch (error) {
+      console.error('❌ 生成真正双耳节拍失败，使用静音替代:', error);
+      // 如果失败，创建静音文件而不是雨声
       return this.createRealSilentMP3(duration, outputFile);
     }
   }
 
-  // 生成真实的双耳节拍（使用预制音频文件）
+  // 生成真实的双耳节拍
   async generateRealBinauralBeats(leftFreq, rightFreq, duration, outputFile) {
-    // 使用预制的双耳节拍文件，根据类型选择
-    const binauralFiles = {
-      'alpha': path.join(this.assetsDir, 'binaural/alpha-10hz.wav'),
-      'beta': path.join(this.assetsDir, 'binaural/beta-20hz.wav'),
-      'theta': path.join(this.assetsDir, 'binaural/theta-6hz.wav'),
-      'delta': path.join(this.assetsDir, 'binaural/delta-3hz.wav')
-    };
+    console.log(`🎵 生成双耳节拍: 左耳${leftFreq}Hz, 右耳${rightFreq}Hz, 时长${duration}秒`);
 
-    // 根据频率差确定类型
-    const freqDiff = rightFreq - leftFreq;
-    let type = 'alpha';
-    if (freqDiff <= 4) type = 'delta';
-    else if (freqDiff <= 8) type = 'theta';
-    else if (freqDiff <= 15) type = 'alpha';
-    else type = 'beta';
+    return new Promise((resolve, reject) => {
+      // 使用FFmpeg的anullsrc和sine滤镜生成双耳节拍
+      const command = ffmpeg();
 
-    const sourceFile = binauralFiles[type];
+      // 使用anullsrc作为输入源，然后通过滤镜生成双耳节拍
+      command
+        .input('anullsrc=channel_layout=stereo:sample_rate=44100')
+        .inputFormat('lavfi')
+        .complexFilter([
+          // 生成左声道正弦波
+          `[0:a]asplit=2[left][right]`,
+          // 左声道使用leftFreq频率
+          `[left]sine=frequency=${leftFreq}:duration=${duration}[leftout]`,
+          // 右声道使用rightFreq频率
+          `[right]sine=frequency=${rightFreq}:duration=${duration}[rightout]`,
+          // 合并左右声道
+          `[leftout][rightout]amerge=inputs=2[out]`
+        ])
+        .map('[out]')
+        .audioCodec('libmp3lame')
+        .audioBitrate('128k')
+        .audioFilters('volume=0.3') // 设置适中的音量
+        .duration(duration)
+        .output(outputFile)
+        .on('end', () => {
+          console.log(`✅ 双耳节拍生成完成: ${outputFile}`);
+          resolve(outputFile);
+        })
+        .on('error', (err) => {
+          console.error('❌ 双耳节拍生成失败:', err);
+          // 如果生成失败，使用简化方法
+          this.generateSimpleBinauralBeats(leftFreq, rightFreq, duration, outputFile)
+            .then(resolve)
+            .catch(() => {
+              // 最后备选：创建静音文件
+              this.createRealSilentMP3(duration, outputFile)
+                .then(resolve)
+                .catch(reject);
+            });
+        })
+        .run();
+    });
+  }
 
-    // 如果预制文件存在，调整时长并复制
-    if (await this.fileExists(sourceFile)) {
-      console.log(`🎵 使用预制双耳节拍文件: ${type}`);
-      return this.adjustDuration(sourceFile, duration, outputFile);
-    } else {
-      // 如果没有预制文件，创建一个简单的静音文件作为占位符
-      console.log(`⚠️ 双耳节拍文件不存在，创建静音占位符`);
-      return this.createSilentAudio(duration, outputFile);
-    }
+  // 简化的双耳节拍生成方法
+  async generateSimpleBinauralBeats(leftFreq, rightFreq, duration, outputFile) {
+    console.log(`🎵 使用简化方法生成双耳节拍: ${leftFreq}Hz - ${rightFreq}Hz`);
+
+    return new Promise((resolve, reject) => {
+      // 使用单一正弦波，通过音量调制模拟双耳节拍效果
+      const beatFreq = Math.abs(rightFreq - leftFreq); // 节拍频率
+      const baseFreq = (leftFreq + rightFreq) / 2; // 基础频率
+
+      const command = ffmpeg();
+
+      command
+        .input(`sine=frequency=${baseFreq}:duration=${duration}`)
+        .inputFormat('lavfi')
+        .audioFilters([
+          `tremolo=${beatFreq}:0.5`, // 使用颤音效果模拟双耳节拍
+          'volume=0.3'
+        ])
+        .audioCodec('libmp3lame')
+        .audioBitrate('128k')
+        .output(outputFile)
+        .on('end', () => {
+          console.log(`✅ 简化双耳节拍生成完成: ${outputFile}`);
+          resolve(outputFile);
+        })
+        .on('error', (err) => {
+          console.error('❌ 简化双耳节拍生成失败:', err);
+          reject(err);
+        })
+        .run();
+    });
   }
 
   // 生成白噪音（使用真实音频文件）
