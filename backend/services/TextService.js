@@ -14,40 +14,73 @@ class TextService {
       return this.generateMockContent(userInput);
     }
 
-    try {
-      console.log('📡 调用Dify工作流...');
-      const response = await this.callDifyWorkflow(userInput);
+    // 重试机制：最多重试3次
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📡 调用Dify工作流... (尝试 ${attempt}/${maxRetries})`);
+        const response = await this.callDifyWorkflow(userInput);
 
-      // 详细打印Dify响应结构
-      console.log('🔍 Dify完整响应:', JSON.stringify(response.data, null, 2));
+        // 详细打印Dify响应结构
+        console.log('🔍 Dify完整响应:', JSON.stringify(response.data, null, 2));
 
-      // 尝试多种可能的字段路径
-      let content = null;
-      if (response.data?.outputs?.text) {
-        content = response.data.outputs.text;
-        console.log('✅ 从outputs.text获取内容');
-      } else if (response.data?.text) {
-        content = response.data.text;
-        console.log('✅ 从text获取内容');
-      } else if (response.data?.data?.outputs?.text) {
-        content = response.data.data.outputs.text;
-        console.log('✅ 从data.outputs.text获取内容');
-      } else if (response.data?.answer) {
-        content = response.data.answer;
-        console.log('✅ 从answer获取内容');
-      } else {
-        content = '内容生成完成';
-        console.log('❌ 未找到有效内容，使用默认值');
+        // 检查工作流是否成功执行
+        if (response.data?.status === 'failed') {
+          const error = response.data.error || '工作流执行失败';
+          console.log(`❌ Dify工作流执行失败 (尝试 ${attempt}/${maxRetries}):`, error);
+
+          if (attempt < maxRetries) {
+            console.log(`⏳ 等待 ${attempt * 2} 秒后重试...`);
+            await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+            continue;
+          } else {
+            console.log('❌ 所有重试都失败，使用模拟内容');
+            return this.generateMockContent(userInput);
+          }
+        }
+
+        // 尝试多种可能的字段路径
+        let content = null;
+        if (response.data?.outputs?.text && response.data.outputs.text.trim()) {
+          content = response.data.outputs.text;
+          console.log('✅ 从outputs.text获取内容');
+        } else if (response.data?.text && response.data.text.trim()) {
+          content = response.data.text;
+          console.log('✅ 从text获取内容');
+        } else if (response.data?.data?.outputs?.text && response.data.data.outputs.text.trim()) {
+          content = response.data.data.outputs.text;
+          console.log('✅ 从data.outputs.text获取内容');
+        } else if (response.data?.answer && response.data.answer.trim()) {
+          content = response.data.answer;
+          console.log('✅ 从answer获取内容');
+        } else {
+          console.log(`❌ 未找到有效内容 (尝试 ${attempt}/${maxRetries})`);
+          if (attempt < maxRetries) {
+            console.log(`⏳ 等待 ${attempt * 2} 秒后重试...`);
+            await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+            continue;
+          } else {
+            content = this.generateMockContent(userInput);
+            console.log('❌ 所有重试都失败，使用模拟内容');
+          }
+        }
+
+        if (content && content.trim() && content !== '内容生成完成') {
+          console.log('✅ Dify工作流响应成功，内容长度:', content.length);
+          console.log('📝 Dify返回内容预览:', content.substring(0, 200) + '...');
+          return content;
+        }
+      } catch (error) {
+        console.error(`❌ Dify工作流调用失败 (尝试 ${attempt}/${maxRetries}):`, error.message);
+        if (attempt < maxRetries) {
+          console.log(`⏳ 等待 ${attempt * 2} 秒后重试...`);
+          await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+        }
       }
-
-      console.log('✅ Dify工作流响应成功，内容长度:', content.length);
-      console.log('📝 Dify返回内容预览:', content.substring(0, 200) + '...');
-      return content;
-    } catch (error) {
-      console.error('❌ Dify工作流调用失败:', error.message);
-      console.log('⚠️ 使用模拟内容作为备选');
-      return this.generateMockContent(userInput);
     }
+
+    console.log('⚠️ 所有重试都失败，使用模拟内容作为备选');
+    return this.generateMockContent(userInput);
   }
 
   // 生成大纲（保留兼容性）
@@ -83,7 +116,11 @@ class TextService {
 
     const requestData = {
       inputs: {
-        message: message  // 使用message作为输入变量
+        message: message,     // 常用的输入变量名
+        query: message,       // 另一种常用名称
+        input: message,       // 简单的输入名称
+        text: message,        // 文本输入
+        user_input: message   // 用户输入
       },
       response_mode: "blocking",
       user: "sub-music-user"
@@ -94,11 +131,27 @@ class TextService {
       'Authorization': `Bearer ${this.config.dify.api_key}`
     };
 
-    console.log('Calling Dify API:', url);
-    console.log('Request data:', JSON.stringify(requestData, null, 2));
+    console.log('🔧 Dify配置检查:');
+    console.log('  - API Key:', this.config.dify.api_key ? `${this.config.dify.api_key.substring(0, 10)}...` : '未设置');
+    console.log('  - Base URL:', this.config.dify.base_url);
+    console.log('  - Workflow ID:', this.config.dify.workflow_id);
+    console.log('📡 调用Dify API:', url);
+    console.log('📤 请求数据:', JSON.stringify(requestData, null, 2));
 
-    const response = await axios.post(url, requestData, { headers });
-    return response.data;
+    try {
+      const response = await axios.post(url, requestData, { headers });
+
+      console.log('📥 Dify响应状态:', response.status);
+      console.log('📥 Dify响应头:', JSON.stringify(response.headers, null, 2));
+
+      return response;
+    } catch (error) {
+      console.error('❌ Dify API调用失败:');
+      console.error('  - 状态码:', error.response?.status);
+      console.error('  - 错误信息:', error.response?.data);
+      console.error('  - 完整错误:', error.message);
+      throw error;
+    }
   }
 
   // 生成模拟大纲

@@ -17,7 +17,7 @@ storage:
 dify:
   api_key: "app-HVLVLTxzFD40EatGtFQexKeI"
   base_url: "http://dify.llingjiu.com/v1"
-  workflow_id: "app-HVLVLTxzFD40EatGtFQexKeI"  # 工作流ID
+  workflow_id: "07e8faf4-4ac2-411b-b4c2-d1bfedf1599a"  # 工作流ID
 
 # 科大讯飞TTS配置
 xfyun:
