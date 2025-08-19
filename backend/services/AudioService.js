@@ -346,14 +346,22 @@ class AudioService {
       let inputCount = 0;
 
       // 使用用户自定义音量或默认配置
-      const finalVolumes = volumes || {
+      const baseVolumes = volumes || {
         voice: 0.1,
         binaural: 0.1,
         background: 0.8,
         environment: 0.5
       };
 
-      console.log('🎚️ 音量设置:', finalVolumes);
+      // 优化音量设置
+      const finalVolumes = this.optimizeVolumes(baseVolumes, inputCount);
+
+      console.log('🎚️ 原始音量设置:', baseVolumes);
+      console.log('🎚️ 优化后音量设置:', finalVolumes);
+
+      // 计算总音量（用于调试）
+      const totalVolume = Object.values(finalVolumes).reduce((sum, vol) => sum + vol, 0);
+      console.log(`📊 总音量估算: ${totalVolume.toFixed(2)} (建议范围: 0.8-1.5)`);
 
       // 添加语音输入（如果存在）
       if (processedVoiceFile && await this.fileExists(processedVoiceFile)) {
@@ -405,8 +413,10 @@ class AudioService {
         // 只有一个音轨，直接输出
         filterComplex.push(`${mixInputs.replace(/\[|\]/g, '')}[out]`);
       } else {
-        // 多个音轨，使用amix混合
-        filterComplex.push(`${mixInputs}amix=inputs=${inputCount}[out]`);
+        // 多个音轨，使用amix混合，并添加音量补偿
+        const volumeCompensation = Math.min(1.8, Math.sqrt(inputCount * 0.8)); // 根据音轨数量计算补偿
+        filterComplex.push(`${mixInputs}amix=inputs=${inputCount},volume=${volumeCompensation}[out]`);
+        console.log(`🔊 应用音量补偿: ${volumeCompensation.toFixed(2)}x (${inputCount} 个音轨)`);
       }
 
       command
@@ -429,6 +439,34 @@ class AudioService {
     });
   }
 
+  // 优化音量设置，防止过小或过大
+  optimizeVolumes(volumes, trackCount) {
+    const optimized = { ...volumes };
+
+    // 计算总音量
+    const totalVolume = Object.values(optimized).reduce((sum, vol) => sum + vol, 0);
+
+    // 如果总音量过小，适当提升
+    if (totalVolume < 0.6) {
+      const boostFactor = 0.8 / totalVolume;
+      Object.keys(optimized).forEach(key => {
+        optimized[key] = Math.min(1.0, optimized[key] * boostFactor);
+      });
+      console.log(`🔊 音量过小，应用提升因子: ${boostFactor.toFixed(2)}`);
+    }
+
+    // 如果总音量过大，适当降低
+    if (totalVolume > 2.0) {
+      const reduceFactor = 1.5 / totalVolume;
+      Object.keys(optimized).forEach(key => {
+        optimized[key] = optimized[key] * reduceFactor;
+      });
+      console.log(`🔉 音量过大，应用降低因子: ${reduceFactor.toFixed(2)}`);
+    }
+
+    return optimized;
+  }
+
   // 混合多个音频文件
   async mixMultipleAudioFiles(audioFiles, duration) {
     const outputFile = path.join(this.tempDir, `mixed_environment_${Date.now()}.mp3`);
@@ -444,9 +482,11 @@ class AudioService {
         command.input(file);
       });
 
-      // 创建混合滤镜
+      // 创建混合滤镜，添加音量补偿
       const filterInputs = audioFiles.map((_, index) => `[${index}:a]`).join('');
-      const mixFilter = `${filterInputs}amix=inputs=${audioFiles.length}:duration=longest:dropout_transition=2[mixed]`;
+      // 计算音量补偿：当混合多个音频时，amix会自动降低音量，我们需要补偿
+      const volumeCompensation = Math.min(2.0, Math.sqrt(audioFiles.length)); // 限制最大补偿为2倍
+      const mixFilter = `${filterInputs}amix=inputs=${audioFiles.length}:duration=longest:dropout_transition=2,volume=${volumeCompensation}[mixed]`;
 
       command
         .complexFilter([mixFilter])
