@@ -131,7 +131,7 @@ const App: React.FC = () => {
     voice: 5,    // 5% = 0.05
     binaural: 10, // 10% = 0.1
     background: 70, // 70% = 0.7
-    environment: 50 // 50% = 0.5
+    environment: 80 // 80% = 0.8 (提高环境音默认音量)
   });
 
   // 音频预览状态
@@ -407,7 +407,7 @@ const App: React.FC = () => {
       const data = await response.json();
       if (data.lastUsed && data.lastUsed.config) {
         const config = data.lastUsed.config;
-        setVolumes(config.volumes || { voice: 5, binaural: 10, background: 70, environment: 50 });
+        setVolumes(config.volumes || { voice: 5, binaural: 10, background: 70, environment: 80 });
         setBinauralType(config.binauralType || 'alpha');
         setNoiseTypes(config.noiseTypes || config.noiseType ? [config.noiseType] : ['rain']); // 兼容旧配置
         setWhiteNoiseType(config.whiteNoiseType || 'pink');
@@ -598,7 +598,7 @@ const App: React.FC = () => {
 
   // 应用配置
   const applyConfig = async (config: any) => {
-    const newVolumes = config.volumes || { voice: 5, binaural: 10, background: 70, environment: 50 };
+    const newVolumes = config.volumes || { voice: 5, binaural: 10, background: 70, environment: 80 };
     setVolumes(newVolumes);
     setBinauralType(config.binauralType || 'alpha');
     setNoiseTypes(config.noiseTypes || config.noiseType ? [config.noiseType] : ['rain']); // 兼容旧配置

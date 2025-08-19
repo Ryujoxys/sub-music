@@ -350,7 +350,7 @@ class AudioService {
         voice: 0.1,
         binaural: 0.1,
         background: 0.8,
-        environment: 0.5
+        environment: 0.8  // 提高环境音频默认音量
       };
 
       // 优化音量设置
@@ -393,7 +393,7 @@ class AudioService {
       // 添加环境音频轨道（自然音频或白噪音）
       if (environmentAudioFile && await this.fileExists(environmentAudioFile)) {
         command.input(environmentAudioFile);
-        filterComplex.push(`[${inputCount}:a]volume=${finalVolumes.environment || 0.5}[environment]`);
+        filterComplex.push(`[${inputCount}:a]volume=${(finalVolumes.environment || 0.8) * 2.0}[environment]`);
         mixInputs += '[environment]';
         inputCount++;
         console.log(`🌿 添加环境音频轨道，音量: ${finalVolumes.environment || 0.5}`);
@@ -485,7 +485,7 @@ class AudioService {
       // 创建混合滤镜，添加音量补偿
       const filterInputs = audioFiles.map((_, index) => `[${index}:a]`).join('');
       // 计算音量补偿：当混合多个音频时，amix会自动降低音量，我们需要补偿
-      const volumeCompensation = Math.min(2.0, Math.sqrt(audioFiles.length)); // 限制最大补偿为2倍
+      const volumeCompensation = Math.min(4.0, Math.sqrt(audioFiles.length) * 2.0); // 再次增加补偿倍数
       const mixFilter = `${filterInputs}amix=inputs=${audioFiles.length}:duration=longest:dropout_transition=2,volume=${volumeCompensation}[mixed]`;
 
       command
