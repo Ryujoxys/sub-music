@@ -84,6 +84,34 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [duration, setDuration] = useState(30);
+  const [durationMinutes, setDurationMinutes] = useState(0);
+  const [durationSeconds, setDurationSeconds] = useState(30);
+
+  // 同步分钟秒和总秒数
+  const updateDurationFromMinutesSeconds = (minutes: number, seconds: number) => {
+    const totalSeconds = minutes * 60 + seconds;
+    const maxSeconds = 10 * 60; // 最大10分钟
+
+    if (totalSeconds > maxSeconds) {
+      // 如果超过10分钟，设置为10分钟
+      setDurationMinutes(10);
+      setDurationSeconds(0);
+      setDuration(600);
+    } else {
+      setDurationMinutes(minutes);
+      setDurationSeconds(seconds);
+      setDuration(totalSeconds);
+    }
+  };
+
+  // 从总秒数更新分钟秒显示
+  const updateMinutesSecondsFromDuration = (totalSeconds: number) => {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    setDurationMinutes(minutes);
+    setDurationSeconds(seconds);
+    setDuration(totalSeconds);
+  };
   const [binauralType, setBinauralType] = useState('alpha');
   const [noiseType, setNoiseType] = useState('rain'); // 环境音频
   const [whiteNoiseType, setWhiteNoiseType] = useState('pink'); // 白噪音
@@ -503,7 +531,7 @@ const App: React.FC = () => {
             noiseType,
             whiteNoiseType,
             voiceSpeed,
-            duration
+            duration: durationMinutes * 60 + durationSeconds
           }
         });
         console.log('✅ 当前配置已保存为最后使用的配置');
@@ -561,7 +589,10 @@ const App: React.FC = () => {
     setNoiseType(config.noiseType || 'rain');
     setWhiteNoiseType(config.whiteNoiseType || 'pink');
     setVoiceSpeed(config.voiceSpeed || 6);
-    setDuration(config.duration || 30);
+
+    // 更新时长并同步分钟秒显示
+    const configDuration = config.duration || 30;
+    updateMinutesSecondsFromDuration(configDuration);
 
     // 保存为最后使用的配置
     try {
@@ -572,7 +603,7 @@ const App: React.FC = () => {
           noiseType: config.noiseType || 'rain',
           whiteNoiseType: config.whiteNoiseType || 'pink',
           voiceSpeed: config.voiceSpeed || 6,
-          duration: config.duration || 30
+          duration: configDuration
         }
       });
       console.log('✅ 最后使用的配置已保存');
