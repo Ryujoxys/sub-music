@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Typography, Card, Button, Input, Progress, List, message, Space, Tag, Upload, Slider, Select, Modal, Collapse } from 'antd';
+import { Layout, Typography, Card, Button, Input, Progress, List, message, Space, Tag, Upload, Slider, Select, Modal, Collapse, InputNumber } from 'antd';
 import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
 import './index.css';
@@ -97,6 +97,13 @@ const App: React.FC = () => {
       setDurationMinutes(10);
       setDurationSeconds(0);
       setDuration(600);
+      message.warning('音频时长不能超过10分钟，已自动调整为10分钟');
+    } else if (totalSeconds < 1) {
+      // 如果小于1秒，设置为1秒
+      setDurationMinutes(0);
+      setDurationSeconds(1);
+      setDuration(1);
+      message.warning('音频时长不能少于1秒，已自动调整为1秒');
     } else {
       setDurationMinutes(minutes);
       setDurationSeconds(seconds);
@@ -113,7 +120,7 @@ const App: React.FC = () => {
     setDuration(totalSeconds);
   };
   const [binauralType, setBinauralType] = useState('alpha');
-  const [noiseType, setNoiseType] = useState('rain'); // 环境音频
+  const [noiseTypes, setNoiseTypes] = useState<string[]>(['rain']); // 环境音频多选
   const [whiteNoiseType, setWhiteNoiseType] = useState('pink'); // 白噪音
   const [voiceSpeed, setVoiceSpeed] = useState(6);
   const [uploadedMusic, setUploadedMusic] = useState<any>(null);
@@ -401,6 +408,14 @@ const App: React.FC = () => {
       if (data.lastUsed && data.lastUsed.config) {
         const config = data.lastUsed.config;
         setVolumes(config.volumes || { voice: 5, binaural: 10, background: 70, environment: 50 });
+        setBinauralType(config.binauralType || 'alpha');
+        setNoiseTypes(config.noiseTypes || config.noiseType ? [config.noiseType] : ['rain']); // 兼容旧配置
+        setWhiteNoiseType(config.whiteNoiseType || 'pink');
+        setVoiceSpeed(config.voiceSpeed || 6);
+
+        // 更新时长并同步分钟秒显示
+        const configDuration = config.duration || 30;
+        updateMinutesSecondsFromDuration(configDuration);
       }
     } catch (error) {
       console.error('加载最后使用的配置失败:', error);
@@ -492,7 +507,7 @@ const App: React.FC = () => {
       formData.append('user_input', userInput);
       formData.append('duration', duration.toString());
       formData.append('binaural_type', binauralType);
-      formData.append('noise_type', noiseType); // 环境音频
+      formData.append('noise_types', JSON.stringify(noiseTypes)); // 环境音频多选
       formData.append('voice_speed', voiceSpeed.toString());
       formData.append('volume_voice', (volumes.voice / 100).toString());
       formData.append('volume_binaural', (volumes.binaural / 100).toString());
@@ -528,7 +543,7 @@ const App: React.FC = () => {
           config: {
             volumes,
             binauralType,
-            noiseType,
+            noiseTypes,
             whiteNoiseType,
             voiceSpeed,
             duration: durationMinutes * 60 + durationSeconds
@@ -561,10 +576,10 @@ const App: React.FC = () => {
       const config = {
         volumes,
         binauralType,
-        noiseType,
+        noiseTypes,
         whiteNoiseType,
         voiceSpeed,
-        duration
+        duration: durationMinutes * 60 + durationSeconds
       };
 
       await axios.post('/api/configs', {
@@ -586,7 +601,7 @@ const App: React.FC = () => {
     const newVolumes = config.volumes || { voice: 5, binaural: 10, background: 70, environment: 50 };
     setVolumes(newVolumes);
     setBinauralType(config.binauralType || 'alpha');
-    setNoiseType(config.noiseType || 'rain');
+    setNoiseTypes(config.noiseTypes || config.noiseType ? [config.noiseType] : ['rain']); // 兼容旧配置
     setWhiteNoiseType(config.whiteNoiseType || 'pink');
     setVoiceSpeed(config.voiceSpeed || 6);
 
@@ -600,7 +615,7 @@ const App: React.FC = () => {
         config: {
           volumes: newVolumes,
           binauralType: config.binauralType || 'alpha',
-          noiseType: config.noiseType || 'rain',
+          noiseTypes: config.noiseTypes || config.noiseType ? [config.noiseType] : ['rain'],
           whiteNoiseType: config.whiteNoiseType || 'pink',
           voiceSpeed: config.voiceSpeed || 6,
           duration: configDuration
@@ -675,18 +690,37 @@ const App: React.FC = () => {
 
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                      ⏱️ 音频时长
+                      ⏱️ 音频时长 (0-10分钟)
                     </label>
-                    <Select
-                      value={duration}
-                      onChange={setDuration}
-                      style={{ width: '100%' }}
-                    >
-                      <Option value={30}>30秒 - 快速体验</Option>
-                      <Option value={60}>1分钟 - 短时专注</Option>
-                      <Option value={300}>5分钟 - 中等时长</Option>
-                      <Option value={600}>10分钟 - 深度体验</Option>
-                    </Select>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <InputNumber
+                        min={0}
+                        max={10}
+                        value={durationMinutes}
+                        onChange={(value) => {
+                          const minutes = value || 0;
+                          updateDurationFromMinutesSeconds(minutes, durationSeconds);
+                        }}
+                        style={{ width: '80px' }}
+                        placeholder="0"
+                      />
+                      <span>分</span>
+                      <InputNumber
+                        min={0}
+                        max={59}
+                        value={durationSeconds}
+                        onChange={(value) => {
+                          const seconds = value || 0;
+                          updateDurationFromMinutesSeconds(durationMinutes, seconds);
+                        }}
+                        style={{ width: '80px' }}
+                        placeholder="0"
+                      />
+                      <span>秒</span>
+                      <span style={{ marginLeft: '12px', color: '#666', fontSize: '12px' }}>
+                        总计: {Math.floor(duration / 60)}分{duration % 60}秒
+                      </span>
+                    </div>
                   </div>
 
                   {/* 音频命名 */}
@@ -707,7 +741,7 @@ const App: React.FC = () => {
                 {/* 环境音频选择 */}
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                    🌿 环境音频选择 (34种自然音效)
+                    🌿 环境音频多选 (34种自然音效)
                   </label>
                   <Space>
                     <Button
@@ -715,10 +749,17 @@ const App: React.FC = () => {
                       onClick={() => setShowAudioSelector(true)}
                       icon="🎵"
                     >
-                      选择并预览环境音频
+                      多选环境音频 ({noiseTypes.length} 种已选)
                     </Button>
-                    {noiseType && noiseType !== 'none' && (
-                      <Tag color="green">环境音频: {noiseType}</Tag>
+                    {noiseTypes && noiseTypes.length > 0 && (
+                      <div style={{ marginTop: '8px' }}>
+                        {noiseTypes.map(type => (
+                          <Tag key={type} color="green" style={{ marginBottom: '4px' }}>
+                            环境音频: {type}
+                          </Tag>
+                        ))}
+                        <Tag color="blue">已选择 {noiseTypes.length} 种音效</Tag>
+                      </div>
                     )}
                   </Space>
                 </div>
@@ -1158,15 +1199,18 @@ const App: React.FC = () => {
 
         {/* 环境音频选择模态框 */}
         <Modal
-          title="🌿 选择环境音频 (34种自然音效)"
+          title={`🌿 选择环境音频 (34种自然音效) - 已选择 ${noiseTypes.length} 种`}
           open={showAudioSelector}
           onCancel={() => setShowAudioSelector(false)}
           footer={[
+            <Button key="clear" onClick={() => setNoiseTypes([])}>
+              清空选择
+            </Button>,
             <Button key="cancel" onClick={() => setShowAudioSelector(false)}>
               取消
             </Button>,
             <Button key="ok" type="primary" onClick={() => setShowAudioSelector(false)}>
-              确认选择
+              确认选择 ({noiseTypes.length} 种)
             </Button>
           ]}
           width={900}
@@ -1183,9 +1227,17 @@ const App: React.FC = () => {
                       description={item.description}
                       audioId={item.id}
                       category="environment"
-                      isSelected={noiseType === item.id}
+                      isSelected={noiseTypes.includes(item.id)}
                       isPlaying={playingAudioId === `environment-${item.id}`}
-                      onSelect={() => setNoiseType(item.id)}
+                      onSelect={() => {
+                        if (noiseTypes.includes(item.id)) {
+                          // 如果已选中，则取消选择
+                          setNoiseTypes(prev => prev.filter(type => type !== item.id));
+                        } else {
+                          // 如果未选中，则添加到选择列表
+                          setNoiseTypes(prev => [...prev, item.id]);
+                        }
+                      }}
                       onPreview={() => previewAudio('environment', item.id)}
                     />
                   ))}

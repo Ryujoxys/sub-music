@@ -18,7 +18,7 @@ class TaskService {
       subTheme = 'focus',
       duration = 30,
       binauralType = 'alpha',
-      noiseType = 'rain',
+      noiseTypes = ['rain'],
       voiceSpeed = 6,
       backgroundMusic = null,
       volumes = { voice: 0.05, binaural: 0.1, background: 0.7 },
@@ -42,7 +42,7 @@ class TaskService {
     this.processTaskAsync(task.id, {
       duration,
       binauralType,
-      noiseType,
+      noiseTypes,
       voiceSpeed,
       backgroundMusic,
       volumes,
@@ -175,7 +175,7 @@ class TaskService {
       const {
         duration = 30,
         binauralType = 'alpha',
-        noiseType = 'rain',
+        noiseTypes = ['rain'],
         voiceSpeed = 6,
         backgroundMusic = null,
         volumes = { voice: 0.05, binaural: 0.1, background: 0.7 },
@@ -236,7 +236,7 @@ class TaskService {
         voiceFile: voiceFile,
         binauralFile: binauralFile,
         backgroundMusic: backgroundMusic,       // 用户上传的背景音乐
-        noiseType: noiseType,                   // 自然音频类型
+        noiseTypes: noiseTypes,                 // 自然音频类型（多选）
         voiceSpeed: voiceSpeed,                 // TTS倍速
         volumes: volumes,                       // 音量配置
         subTheme: task.sub_theme,

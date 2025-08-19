@@ -256,7 +256,7 @@ class AudioService {
   }
 
   // 混合多个音频文件
-  async mixAudio({ voiceFile, binauralFile, backgroundMusic, noiseType, voiceSpeed, volumes, subTheme, taskId, duration, audioName }) {
+  async mixAudio({ voiceFile, binauralFile, backgroundMusic, noiseTypes, voiceSpeed, volumes, subTheme, taskId, duration, audioName }) {
     // 使用自定义音频名称或默认名称
     const fileName = audioName ? `${audioName}.mp3` : `task_${taskId}.mp3`;
     const outputFile = path.join(this.outputDir, fileName);
@@ -284,26 +284,49 @@ class AudioService {
       backgroundMusicFile = await this.repeatAudioToFillDuration(backgroundMusic, targetDuration);
     }
 
-    // 准备环境音频轨道（自然音频或白噪音）
+    // 准备环境音频轨道（支持多选混合）
     let environmentAudioFile = null;
-    if (noiseType && noiseType !== 'none') {
-      // 首先尝试白噪音文件
-      const whiteNoiseFile = this.getWhiteNoiseFile(noiseType);
-      if (whiteNoiseFile && await this.fileExists(whiteNoiseFile)) {
-        console.log(`🔊 使用白噪音: ${noiseType}`);
-        environmentAudioFile = await this.repeatAudioToFillDuration(whiteNoiseFile, targetDuration);
-      } else {
-        // 尝试自然音频文件
-        const naturalAudioFile = this.getNaturalAudioFile(noiseType);
-        if (naturalAudioFile && await this.fileExists(naturalAudioFile)) {
-          console.log(`🌿 使用自然音频: ${noiseType}`);
-          environmentAudioFile = await this.repeatAudioToFillDuration(naturalAudioFile, targetDuration);
+    if (noiseTypes && noiseTypes.length > 0) {
+      console.log(`🌿 处理多选环境音频: ${noiseTypes.join(', ')}`);
+
+      const environmentFiles = [];
+
+      // 为每个选中的环境音频准备文件
+      for (const noiseType of noiseTypes) {
+        if (noiseType === 'none') continue;
+
+        let audioFile = null;
+
+        // 首先尝试白噪音文件
+        const whiteNoiseFile = this.getWhiteNoiseFile(noiseType);
+        if (whiteNoiseFile && await this.fileExists(whiteNoiseFile)) {
+          console.log(`🔊 使用白噪音: ${noiseType}`);
+          audioFile = await this.repeatAudioToFillDuration(whiteNoiseFile, targetDuration);
         } else {
-          console.log(`⚠️ 环境音频文件不存在: ${noiseType}`);
+          // 尝试自然音频文件
+          const naturalAudioFile = this.getNaturalAudioFile(noiseType);
+          if (naturalAudioFile && await this.fileExists(naturalAudioFile)) {
+            console.log(`🌿 使用自然音频: ${noiseType}`);
+            audioFile = await this.repeatAudioToFillDuration(naturalAudioFile, targetDuration);
+          } else {
+            console.log(`⚠️ 环境音频文件不存在: ${noiseType}`);
+          }
+        }
+
+        if (audioFile) {
+          environmentFiles.push(audioFile);
         }
       }
+
+      // 如果有多个环境音频文件，混合它们
+      if (environmentFiles.length > 1) {
+        console.log(`🎵 混合 ${environmentFiles.length} 个环境音频文件`);
+        environmentAudioFile = await this.mixMultipleAudioFiles(environmentFiles, targetDuration);
+      } else if (environmentFiles.length === 1) {
+        environmentAudioFile = environmentFiles[0];
+      }
     } else {
-      console.log('🔇 跳过环境音频（用户选择无）');
+      console.log('🔇 跳过环境音频（用户未选择）');
     }
 
     // 如果有语音文件，需要加速处理，然后重复填满时长
@@ -401,6 +424,45 @@ class AudioService {
         .on('error', (err) => {
           console.error('❌ Audio mixing error:', err);
           reject(err);
+        })
+        .run();
+    });
+  }
+
+  // 混合多个音频文件
+  async mixMultipleAudioFiles(audioFiles, duration) {
+    const outputFile = path.join(this.tempDir, `mixed_environment_${Date.now()}.mp3`);
+    await this.ensureDir(path.dirname(outputFile));
+
+    return new Promise((resolve, reject) => {
+      console.log(`🎵 开始混合 ${audioFiles.length} 个环境音频文件`);
+
+      const command = ffmpeg();
+
+      // 添加所有输入文件
+      audioFiles.forEach(file => {
+        command.input(file);
+      });
+
+      // 创建混合滤镜
+      const filterInputs = audioFiles.map((_, index) => `[${index}:a]`).join('');
+      const mixFilter = `${filterInputs}amix=inputs=${audioFiles.length}:duration=longest:dropout_transition=2[mixed]`;
+
+      command
+        .complexFilter([mixFilter])
+        .outputOptions(['-map', '[mixed]'])
+        .audioCodec('libmp3lame')
+        .audioBitrate('192k')
+        .duration(duration)
+        .output(outputFile)
+        .on('end', () => {
+          console.log(`✅ 环境音频混合完成: ${outputFile}`);
+          resolve(outputFile);
+        })
+        .on('error', (err) => {
+          console.error('❌ 环境音频混合失败:', err);
+          // 如果混合失败，返回第一个文件作为备选
+          resolve(audioFiles[0]);
         })
         .run();
     });
